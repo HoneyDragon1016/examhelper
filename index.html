@@ -1,0 +1,1882 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MarkFlow - 數位考卷批閱系統 (Continuous Exam Grader)</title>
+  
+  <!-- PDF.js 穩定特定版本鎖定 (cdnjs) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  
+  <style>
+    /* ==========================================================================
+       CSS 現代原生變數與 Reset
+       ========================================================================== */
+    :root {
+      --bg-base: #0f172a;
+      --bg-surface: #1e293b;
+      --bg-elevated: #334155;
+      --bg-canvas-wrap: #090d16;
+      --border-subtle: #334155;
+      --border-highlight: #475569;
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --primary-focus: rgba(56, 189, 248, 0.25);
+      --accent-danger: #f43f5e;
+      --accent-success: #10b981;
+      --accent-warning: #f59e0b;
+      
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      
+      --header-height: 56px;
+      --sidebar-width: 380px;
+      --toolbar-width: 52px;
+      
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* ==========================================================================
+       頂部主工具列 (Header Navigation)
+       ========================================================================== */
+    .app-header {
+      height: var(--header-height);
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 50;
+      gap: 12px;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #0f172a;
+      font-size: 16px;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: var(--text-main);
+    }
+
+    .brand-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .page-nav-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-base);
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .page-info {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-muted);
+      min-width: 90px;
+      text-align: center;
+    }
+
+    .page-info strong {
+      color: var(--text-main);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--border-highlight);
+      border-color: var(--primary);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-icon {
+      padding: 6px 8px;
+      font-size: 14px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #0f172a;
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+    }
+
+    .btn-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-success);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: var(--accent-success);
+      color: #0f172a;
+    }
+
+    .btn-danger {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--accent-danger);
+      border-color: rgba(244, 63, 94, 0.4);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: var(--accent-danger);
+      color: #fff;
+    }
+
+    .save-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--accent-success);
+      padding: 0 8px;
+    }
+
+    .save-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--accent-success);
+      box-shadow: 0 0 6px var(--accent-success);
+    }
+
+    /* ==========================================================================
+       主內容區域 (Main Split View)
+       ========================================================================== */
+    .app-main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ==========================================================================
+       浮動筆刷與工具箱 (Floating Brush Toolbox)
+       ========================================================================== */
+    .brush-toolbox {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 40;
+      background: rgba(30, 41, 59, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-highlight);
+      border-radius: var(--radius-lg);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .color-palette {
+      display: grid;
+      grid-template-columns: repeat(2, 22px);
+      gap: 6px;
+    }
+
+    .color-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+      position: relative;
+    }
+
+    .color-swatch:hover {
+      transform: scale(1.15);
+    }
+
+    .color-swatch.active {
+      transform: scale(1.15);
+      border-color: #ffffff;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+    }
+
+    .width-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .width-btn {
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    .width-btn.active {
+      border-color: var(--primary);
+      background: var(--bg-elevated);
+    }
+
+    .width-line {
+      background-color: var(--text-main);
+      border-radius: 2px;
+      width: 18px;
+    }
+
+    .tool-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    /* ==========================================================================
+       畫布檢視區 (Canvas Viewport Container)
+       ========================================================================== */
+    .viewport-container {
+      flex: 1;
+      background-color: var(--bg-canvas-wrap);
+      overflow: auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      cursor: crosshair;
+    }
+
+    .canvas-stage {
+      position: relative;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      background-color: #ffffff;
+      transform-origin: top center;
+      margin: auto;
+    }
+
+    /* 唯讀底層考卷畫布 */
+    #bgCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: block;
+    }
+
+    /* 批閱手寫頂層畫布 */
+    #inkCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 20;
+      touch-action: none;
+      display: block;
+    }
+
+    /* 空狀態提示 */
+    .empty-state {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: var(--text-muted);
+      max-width: 440px;
+      padding: 32px;
+      background: var(--bg-surface);
+      border: 2px dashed var(--border-highlight);
+      border-radius: var(--radius-lg);
+      cursor: default;
+    }
+
+    .empty-state h3 {
+      color: var(--text-main);
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .empty-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    /* ==========================================================================
+       側欄成績試算表 (Grading Sidebar)
+       ========================================================================== */
+    .app-sidebar {
+      width: var(--sidebar-width);
+      background-color: var(--bg-surface);
+      border-left: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      z-index: 30;
+      user-select: text;
+    }
+
+    .sidebar-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 學生資訊卡片 */
+    .info-card {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      padding: 6px 10px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary-focus);
+    }
+
+    /* 總分卡片 */
+    .score-card {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(129, 140, 248, 0.1));
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .score-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .score-value {
+      font-family: var(--font-mono);
+      font-size: 32px;
+      font-weight: 800;
+      color: #38bdf8;
+      letter-spacing: -1px;
+    }
+
+    /* 題目配分表 */
+    .question-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .question-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .question-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 32px;
+      gap: 8px;
+      align-items: center;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
+    }
+
+    .question-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .score-input {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: #38bdf8;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 4px 8px;
+      text-align: right;
+      outline: none;
+      width: 100%;
+    }
+
+    .score-input:focus {
+      border-color: var(--primary);
+      background: var(--bg-surface);
+      box-shadow: 0 0 0 2px var(--primary-focus);
+    }
+
+    .del-q-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-subtle);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      height: 24px;
+      width: 24px;
+    }
+
+    .del-q-btn:hover {
+      color: var(--accent-danger);
+      background: rgba(244, 63, 94, 0.1);
+    }
+
+    .question-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* 批閱進度與快速切換清單 */
+    .queue-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-base);
+      padding: 4px;
+    }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.1s;
+      color: var(--text-muted);
+    }
+
+    .queue-item:hover {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+    }
+
+    .queue-item.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .queue-item-score {
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+
+    /* 底部操作區 */
+    .sidebar-footer {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* 隱藏的檔案輸入 */
+    .hidden-input {
+      display: none;
+    }
+
+    /* 快捷鍵提示 Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--primary);
+      color: var(--text-main);
+      padding: 10px 20px;
+      border-radius: 9999px;
+      font-size: 13px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部導航列 -->
+  <header class="app-header">
+    <div class="brand-group">
+      <div class="brand-logo">M</div>
+      <div class="brand-title">MarkFlow</div>
+      <div class="brand-badge">連續饋紙考卷批閱</div>
+    </div>
+
+    <!-- 檔案載入功能群 -->
+    <div class="header-actions">
+      <button class="btn btn-primary" id="btnLoadPdf" title="支援多頁或多份 PDF 自動平鋪">
+        📄 載入 PDF 檔案
+      </button>
+      <button class="btn" id="btnLoadDir" title="掃描機批次影像資料夾">
+        📁 載入掃描資料夾
+      </button>
+      <button class="btn" id="btnLoadImages" title="選擇單張或多張 JPG/PNG 圖檔">
+        🖼️ 載入圖檔
+      </button>
+
+      <input type="file" id="inputPdf" class="hidden-input" accept="application/pdf" multiple>
+      <input type="file" id="inputDir" class="hidden-input" webkitdirectory directory multiple>
+      <input type="file" id="inputImages" class="hidden-input" accept="image/jpeg,image/png,image/webp" multiple>
+    </div>
+
+    <!-- 分頁與換頁控制 -->
+    <div class="page-nav-group">
+      <button class="btn btn-icon" id="btnPrevPage" title="上一頁 (PageUp 或 ←)" disabled>◀</button>
+      <div class="page-info">
+        <span id="curPageNum">0</span> / <span id="totalPageNum">0</span>
+      </div>
+      <button class="btn btn-icon" id="btnNextPage" title="下一頁 (PageDown 或 →)" disabled>▶</button>
+    </div>
+
+    <!-- 縮放與持久化狀態 -->
+    <div class="header-actions">
+      <button class="btn btn-icon" id="btnZoomOut" title="縮小 (Ctrl + -)">−</button>
+      <button class="btn btn-icon" id="btnZoomReset" title="重設縮放 (100%)">100%</button>
+      <button class="btn btn-icon" id="btnZoomIn" title="放大 (Ctrl + +)">+</button>
+      <button class="btn btn-icon" id="btnZoomFit" title="符合寬度">⛶</button>
+
+      <div class="save-indicator" title="資料已由 IndexedDB 即時本機加密持久化">
+        <div class="save-dot"></div>
+        <span>本地已儲存</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主工作視窗 -->
+  <main class="app-main">
+    
+    <!-- 浮動平滑筆刷工具箱 -->
+    <div class="brush-toolbox" id="brushToolbox">
+      <!-- 7 筆刷色彩 -->
+      <div class="color-palette" title="選擇批閱色彩">
+        <!-- 1. 紅筆 (批閱主要色) -->
+        <div class="color-swatch active" data-color="#ef4444" style="background-color: #ef4444;" title="標準紅筆"></div>
+        <!-- 2. 藍筆 -->
+        <div class="color-swatch" data-color="#3b82f6" style="background-color: #3b82f6;" title="藍筆"></div>
+        <!-- 3. 綠筆 -->
+        <div class="color-swatch" data-color="#10b981" style="background-color: #10b981;" title="綠筆"></div>
+        <!-- 4. 螢光黃 -->
+        <div class="color-swatch" data-color="#eab308" style="background-color: #eab308;" title="螢光黃"></div>
+        <!-- 5. 紫筆 -->
+        <div class="color-swatch" data-color="#8b5cf6" style="background-color: #8b5cf6;" title="紫筆"></div>
+        <!-- 6. 黑筆 -->
+        <div class="color-swatch" data-color="#1f2937" style="background-color: #1f2937;" title="黑筆"></div>
+        <!-- 7. 立可帶 / 修正白 -->
+        <div class="color-swatch" data-color="#ffffff" style="background-color: #ffffff; border: 1px solid #64748b;" title="立可白 / 修正帶"></div>
+      </div>
+
+      <!-- 3 段筆觸粗細 -->
+      <div class="width-selector" title="選擇筆畫粗細">
+        <div class="width-btn" data-width="2" title="細 (2px)">
+          <div class="width-line" style="height: 2px;"></div>
+        </div>
+        <div class="width-btn active" data-width="4" title="中 (4px)">
+          <div class="width-line" style="height: 4px;"></div>
+        </div>
+        <div class="width-btn" data-width="8" title="粗 (8px)">
+          <div class="width-line" style="height: 7px;"></div>
+        </div>
+      </div>
+
+      <!-- 復原與清空動作 -->
+      <div class="tool-actions">
+        <button class="btn btn-icon" id="btnUndo" title="復原上一筆 (Ctrl + Z)">↩</button>
+        <button class="btn btn-icon btn-danger" id="btnClearPageInk" title="清空本頁所有筆跡">🗑️</button>
+      </div>
+    </div>
+
+    <!-- 畫布滾動檢視區 -->
+    <div class="viewport-container" id="viewportContainer">
+      <!-- 考卷畫布舞台 (雙層架構) -->
+      <div class="canvas-stage" id="canvasStage" style="display: none;">
+        <!-- 底層：原卷唯讀影像 -->
+        <canvas id="bgCanvas"></canvas>
+        <!-- 頂層：手寫筆跡繪圖層 (touch-action: none) -->
+        <canvas id="inkCanvas"></canvas>
+      </div>
+
+      <!-- 初始無考卷引導介面 -->
+      <div class="empty-state" id="emptyState">
+        <h3>尚未載入考卷</h3>
+        <p>請點擊上方按鈕載入考卷掃描檔。<br>支援連續饋紙機產出之多頁 PDF、批次圖檔資料夾（JPG/PNG/WEBP）。所有解析度與批閱運算皆在本地執行，保障隱私。</p>
+        <div class="empty-actions">
+          <button class="btn btn-primary" onclick="document.getElementById('inputPdf').click()">載入 PDF</button>
+          <button class="btn" onclick="document.getElementById('inputDir').click()">載入掃描資料夾</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 側欄：成績試算與學生評分面板 -->
+    <aside class="app-sidebar" id="appSidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">
+          <span>📝 評分與批閱表</span>
+        </div>
+        <button class="btn btn-icon btn-danger" id="btnResetAll" title="清空全部暫存資料" style="padding: 2px 6px; font-size: 11px;">
+          重置重測
+        </button>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- 學生基本資訊 -->
+        <div class="info-card">
+          <div class="form-group">
+            <label class="form-label" for="studentIdInput">學號 / 座號</label>
+            <input type="text" id="studentIdInput" class="form-input" placeholder="例：01 或 S101" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="studentNameInput">學生姓名</label>
+            <input type="text" id="studentNameInput" class="form-input" placeholder="例：王小明" autocomplete="off">
+          </div>
+        </div>
+
+        <!-- 總分即時加總顯示卡片 -->
+        <div class="score-card">
+          <div class="score-label">本頁實得總分 (TOTAL)</div>
+          <div class="score-value" id="totalScoreDisplay">0</div>
+        </div>
+
+        <!-- 題目配分即時試算清單 -->
+        <div class="question-section">
+          <div class="section-header">
+            <span class="section-title">題目列表 (可按 Enter 切換下一題)</span>
+            <div class="question-controls">
+              <button class="btn" id="btnAddQuestion" style="padding: 2px 8px; font-size: 11px;">+ 新增題目</button>
+            </div>
+          </div>
+          
+          <div class="question-grid" id="questionGrid">
+            <!-- 動態生成題目列 -->
+          </div>
+        </div>
+
+        <!-- 全卷進度導覽列表 -->
+        <div class="queue-section">
+          <div class="section-header">
+            <span class="section-title">批閱隊列導覽 (<span id="gradedCount">0</span> 已評)</span>
+          </div>
+          <div class="queue-list" id="queueList">
+            <!-- 動態產生考卷分頁縮圖列表 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 側欄底部匯出操作 -->
+      <div class="sidebar-footer">
+        <button class="btn btn-success" id="btnExportCsv" style="width: 100%; justify-content: center; padding: 10px;">
+          📊 匯出全班成績表 (UTF-8 BOM CSV)
+        </button>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- 全域提示訊息框 -->
+  <div class="toast" id="toastMessage"></div>
+
+  <!-- ==========================================================================
+       核心應用邏輯 (JavaScript)
+       ========================================================================== -->
+  <script>
+    'use strict';
+
+    /**
+     * MarkFlow - 單一檔案考卷批閱系統核心引擎
+     * 1. 影像管線與虛擬記憶體管理
+     * 2. 雙層高精度 DPI 畫布與二次貝茲平滑筆刷
+     * 3. 試算側欄與快速換頁聚焦機制
+     * 4. IndexedDB 本地持久化與 UTF-8 BOM CSV 匯出
+     */
+
+    // --- 全域常數與設定 ---
+    const DB_NAME = 'MarkFlowExamGraderDB';
+    const DB_VERSION = 1;
+    const STORE_PAGES = 'pagesData';
+    const STORE_CONFIG = 'globalConfig';
+
+    // 初始化 PDF.js Worker
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    // --- 應用程式狀態 (Single Source of Truth) ---
+    const state = {
+      // 考卷分頁隊列: { id, type: 'pdf'|'image', name, pageNum, pdfDoc, file, width, height }
+      queue: [],
+      currentIndex: -1,
+      zoomLevel: 1.0,
+
+      // 當前頁暫存手寫線條: Array<{ color, width, points: Array<{x, y, pressure}> }>
+      currentStrokes: [],
+      isDrawing: false,
+      activePointerId: null,
+
+      // 筆刷設定
+      brush: {
+        color: '#ef4444',
+        width: 4
+      },
+
+      // 題目題號設定清單: ['1', '2', '3', '4', '5']
+      questionList: ['1', '2', '3', '4', '5'],
+
+      // 資料庫實例
+      db: null,
+
+      // 虛擬渲染資源追蹤 (防止 OOM)
+      activeRenderTask: null,
+      activeObjectUrl: null
+    };
+
+    // --- DOM 元素快取 ---
+    const dom = {
+      // 導航
+      btnLoadPdf: document.getElementById('btnLoadPdf'),
+      btnLoadDir: document.getElementById('btnLoadDir'),
+      btnLoadImages: document.getElementById('btnLoadImages'),
+      inputPdf: document.getElementById('inputPdf'),
+      inputDir: document.getElementById('inputDir'),
+      inputImages: document.getElementById('inputImages'),
+      btnPrevPage: document.getElementById('btnPrevPage'),
+      btnNextPage: document.getElementById('btnNextPage'),
+      curPageNum: document.getElementById('curPageNum'),
+      totalPageNum: document.getElementById('totalPageNum'),
+      btnZoomIn: document.getElementById('btnZoomIn'),
+      btnZoomOut: document.getElementById('btnZoomOut'),
+      btnZoomReset: document.getElementById('btnZoomReset'),
+      btnZoomFit: document.getElementById('btnZoomFit'),
+
+      // 畫布檢視
+      viewportContainer: document.getElementById('viewportContainer'),
+      canvasStage: document.getElementById('canvasStage'),
+      bgCanvas: document.getElementById('bgCanvas'),
+      inkCanvas: document.getElementById('inkCanvas'),
+      emptyState: document.getElementById('emptyState'),
+
+      // 筆刷
+      brushToolbox: document.getElementById('brushToolbox'),
+      btnUndo: document.getElementById('btnUndo'),
+      btnClearPageInk: document.getElementById('btnClearPageInk'),
+
+      // 側欄評分
+      studentIdInput: document.getElementById('studentIdInput'),
+      studentNameInput: document.getElementById('studentNameInput'),
+      totalScoreDisplay: document.getElementById('totalScoreDisplay'),
+      btnAddQuestion: document.getElementById('btnAddQuestion'),
+      questionGrid: document.getElementById('questionGrid'),
+      queueList: document.getElementById('queueList'),
+      gradedCount: document.getElementById('gradedCount'),
+      btnExportCsv: document.getElementById('btnExportCsv'),
+      btnResetAll: document.getElementById('btnResetAll'),
+      toastMessage: document.getElementById('toastMessage')
+    };
+
+    // ==========================================================================
+    // 模組 1: 本地資料庫持久化 (IndexedDB)
+    // ==========================================================================
+    const Storage = {
+      async init() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_PAGES)) {
+              db.createObjectStore(STORE_PAGES, { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains(STORE_CONFIG)) {
+              db.createObjectStore(STORE_CONFIG, { keyPath: 'key' });
+            }
+          };
+          request.onsuccess = (e) => {
+            state.db = e.target.result;
+            resolve(state.db);
+          };
+          request.onerror = (e) => reject(e);
+        });
+      },
+
+      async getPageData(pageId) {
+        if (!state.db) return null;
+        return new Promise((resolve) => {
+          const tx = state.db.transaction([STORE_PAGES], 'readonly');
+          const store = tx.objectStore(STORE_PAGES);
+          const req = store.get(pageId);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+      },
+
+      async savePageData(pageData) {
+        if (!state.db) return;
+        return new Promise((resolve) => {
+          const tx = state.db.transaction([STORE_PAGES], 'readwrite');
+          const store = tx.objectStore(STORE_PAGES);
+          store.put(pageData);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
+      },
+
+      async getAllPagesData() {
+        if (!state.db) return [];
+        return new Promise((resolve) => {
+          const tx = state.db.transaction([STORE_PAGES], 'readonly');
+          const store = tx.objectStore(STORE_PAGES);
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => resolve([]);
+        });
+      },
+
+      async saveConfig(key, value) {
+        if (!state.db) return;
+        const tx = state.db.transaction([STORE_CONFIG], 'readwrite');
+        tx.objectStore(STORE_CONFIG).put({ key, value });
+      },
+
+      async getConfig(key) {
+        if (!state.db) return null;
+        return new Promise((resolve) => {
+          const tx = state.db.transaction([STORE_CONFIG], 'readonly');
+          const req = tx.objectStore(STORE_CONFIG).get(key);
+          req.onsuccess = () => resolve(req.result ? req.result.value : null);
+          req.onerror = () => resolve(null);
+        });
+      },
+
+      async clearAll() {
+        if (!state.db) return;
+        return new Promise((resolve) => {
+          const tx = state.db.transaction([STORE_PAGES, STORE_CONFIG], 'readwrite');
+          tx.objectStore(STORE_PAGES).clear();
+          tx.objectStore(STORE_CONFIG).clear();
+          tx.oncomplete = () => resolve();
+        });
+      }
+    };
+
+    // ==========================================================================
+    // 模組 2: 檔案解析與虛擬記憶體管理 (File & Viewport Pipeline)
+    // ==========================================================================
+    
+    // 自然排序器 (例如: exam_1, exam_2, exam_10)
+    const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+    async function handlePdfFiles(fileList) {
+      showToast('正在解析 PDF 考卷分頁...');
+      const files = Array.from(fileList).sort((a, b) => naturalCollator.compare(a.name, b.name));
+      
+      for (const file of files) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const numPages = pdfDoc.numPages;
+
+          for (let p = 1; p <= numPages; p++) {
+            const pageId = `pdf_${file.name}_p${p}`;
+            state.queue.push({
+              id: pageId,
+              type: 'pdf',
+              name: `${file.name} (第 ${p} 頁)`,
+              pageNum: p,
+              pdfDoc: pdfDoc
+            });
+          }
+        } catch (err) {
+          console.error('PDF 解析失敗:', err);
+          showToast(`無法解析 PDF 檔案: ${file.name}`);
+        }
+      }
+
+      finishQueueLoading();
+    }
+
+    function handleImageFiles(fileList) {
+      showToast('正在載入考卷影像...');
+      const validExts = ['.jpg', '.jpeg', '.png', '.webp'];
+      const files = Array.from(fileList)
+        .filter(f => validExts.some(ext => f.name.toLowerCase().endsWith(ext)))
+        .sort((a, b) => naturalCollator.compare(a.name, b.name));
+
+      for (const file of files) {
+        const pageId = `img_${file.name}_${file.size}_${file.lastModified}`;
+        state.queue.push({
+          id: pageId,
+          type: 'image',
+          name: file.name,
+          file: file
+        });
+      }
+
+      finishQueueLoading();
+    }
+
+    function finishQueueLoading() {
+      if (state.queue.length === 0) {
+        showToast('未找到有效考卷分頁');
+        return;
+      }
+
+      dom.totalPageNum.textContent = state.queue.length;
+      dom.emptyState.style.display = 'none';
+      dom.canvasStage.style.display = 'block';
+
+      // 若原先未載入，跳轉至第 1 頁
+      if (state.currentIndex === -1) {
+        navigateToPage(0);
+      } else {
+        updateNavigationUI();
+        renderQueueList();
+      }
+
+      showToast(`已成功載入 ${state.queue.length} 頁考卷`);
+    }
+
+    // 虛擬化記憶體釋放：主動切斷前一頁 Canvas 快取與 Object URL
+    function cleanupPreviousPageResources() {
+      if (state.activeRenderTask) {
+        try {
+          state.activeRenderTask.cancel();
+        } catch (e) {}
+        state.activeRenderTask = null;
+      }
+      if (state.activeObjectUrl) {
+        URL.revokeObjectURL(state.activeObjectUrl);
+        state.activeObjectUrl = null;
+      }
+    }
+
+    async function renderCurrentPage() {
+      if (state.currentIndex < 0 || state.currentIndex >= state.queue.length) return;
+
+      const pageItem = state.queue[state.currentIndex];
+      cleanupPreviousPageResources();
+
+      const bgCanvas = dom.bgCanvas;
+      const inkCanvas = dom.inkCanvas;
+      const bgCtx = bgCanvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+
+      if (pageItem.type === 'pdf') {
+        const pdfPage = await pageItem.pdfDoc.getPage(pageItem.pageNum);
+        // 以標準 1.5 倍基底縮放維持高解析批閱清晰度
+        const viewport = pdfPage.getViewport({ scale: 1.5 });
+
+        const logicalWidth = viewport.width;
+        const logicalHeight = viewport.height;
+
+        // 設定底層考卷畫布尺寸
+        bgCanvas.width = Math.round(logicalWidth * dpr);
+        bgCanvas.height = Math.round(logicalHeight * dpr);
+        bgCanvas.style.width = `${logicalWidth}px`;
+        bgCanvas.style.height = `${logicalHeight}px`;
+
+        // 設定頂層手寫畫布尺寸 (必須嚴格同步以杜絕位移)
+        inkCanvas.width = Math.round(logicalWidth * dpr);
+        inkCanvas.height = Math.round(logicalHeight * dpr);
+        inkCanvas.style.width = `${logicalWidth}px`;
+        inkCanvas.style.height = `${logicalHeight}px`;
+
+        dom.canvasStage.style.width = `${logicalWidth}px`;
+        dom.canvasStage.style.height = `${logicalHeight}px`;
+
+        // 渲染考卷唯讀背景
+        bgCtx.save();
+        bgCtx.scale(dpr, dpr);
+        const renderContext = {
+          canvasContext: bgCtx,
+          viewport: viewport
+        };
+        state.activeRenderTask = pdfPage.render(renderContext);
+        await state.activeRenderTask.promise;
+        bgCtx.restore();
+
+        pageItem.width = logicalWidth;
+        pageItem.height = logicalHeight;
+
+      } else if (pageItem.type === 'image') {
+        const img = new Image();
+        const objUrl = URL.createObjectURL(pageItem.file);
+        state.activeObjectUrl = objUrl;
+
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = objUrl;
+        });
+
+        // 限制最大顯示寬度為 1200px (連續饋紙高 DPI 圖形縮放為合適檢視尺度)
+        const maxWidth = 1200;
+        let logicalWidth = img.naturalWidth;
+        let logicalHeight = img.naturalHeight;
+
+        if (logicalWidth > maxWidth) {
+          const ratio = maxWidth / logicalWidth;
+          logicalWidth = maxWidth;
+          logicalHeight = logicalHeight * ratio;
+        }
+
+        bgCanvas.width = Math.round(logicalWidth * dpr);
+        bgCanvas.height = Math.round(logicalHeight * dpr);
+        bgCanvas.style.width = `${logicalWidth}px`;
+        bgCanvas.style.height = `${logicalHeight}px`;
+
+        inkCanvas.width = Math.round(logicalWidth * dpr);
+        inkCanvas.height = Math.round(logicalHeight * dpr);
+        inkCanvas.style.width = `${logicalWidth}px`;
+        inkCanvas.style.height = `${logicalHeight}px`;
+
+        dom.canvasStage.style.width = `${logicalWidth}px`;
+        dom.canvasStage.style.height = `${logicalHeight}px`;
+
+        bgCtx.save();
+        bgCtx.scale(dpr, dpr);
+        bgCtx.drawImage(img, 0, 0, logicalWidth, logicalHeight);
+        bgCtx.restore();
+
+        pageItem.width = logicalWidth;
+        pageItem.height = logicalHeight;
+      }
+
+      // 載入當前頁已儲存的筆畫與成績資料
+      await loadPageData(pageItem.id);
+      applyZoom();
+    }
+
+    // ==========================================================================
+    // 模組 3: 雙層畫布與平滑筆刷引擎 (Brush & Bézier Engine)
+    // ==========================================================================
+    
+    // 取得相對於邏輯 Canvas 座標系統的精確點 (消除 Zoom 與 DPR 產生的位移)
+    function getCanvasCoordinates(e) {
+      const inkCanvas = dom.inkCanvas;
+      const rect = inkCanvas.getBoundingClientRect();
+      const pageItem = state.queue[state.currentIndex];
+      if (!pageItem) return { x: 0, y: 0, pressure: 0.5 };
+
+      // 依據 getBoundingClientRect 與實際 style 尺寸作精確比例映射
+      const scaleX = pageItem.width / rect.width;
+      const scaleY = pageItem.height / rect.height;
+
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+      
+      // 電磁手寫筆壓力感應支援
+      let pressure = 0.5;
+      if (typeof e.pressure === 'number' && e.pressure > 0) {
+        pressure = e.pressure;
+      }
+
+      return { x, y, pressure };
+    }
+
+    function initBrushEngine() {
+      const inkCanvas = dom.inkCanvas;
+
+      inkCanvas.addEventListener('pointerdown', handlePointerDown);
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
+
+      // 快捷鍵復原
+      window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+          if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+          e.preventDefault();
+          undoLastStroke();
+        }
+      });
+    }
+
+    let currentStroke = null;
+
+    function handlePointerDown(e) {
+      if (state.currentIndex === -1) return;
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+      state.isDrawing = true;
+      state.activePointerId = e.pointerId;
+      dom.inkCanvas.setPointerCapture(e.pointerId);
+
+      const pt = getCanvasCoordinates(e);
+      currentStroke = {
+        color: state.brush.color,
+        width: state.brush.width,
+        points: [pt]
+      };
+
+      state.currentStrokes.push(currentStroke);
+
+      // 繪製單點 (當快速打點或給分勾選時)
+      drawStrokeSegment(currentStroke, 0, true);
+    }
+
+    function handlePointerMove(e) {
+      if (!state.isDrawing || e.pointerId !== state.activePointerId || !currentStroke) return;
+
+      const pt = getCanvasCoordinates(e);
+      const points = currentStroke.points;
+      const lastPt = points[points.length - 1];
+
+      // 微距防抖過濾：距離小於 1.5 像素則略過
+      const dist = Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y);
+      if (dist < 1.5) return;
+
+      points.push(pt);
+      drawStrokeSegment(currentStroke, points.length - 1, false);
+    }
+
+    function handlePointerUp(e) {
+      if (!state.isDrawing || (e && e.pointerId !== state.activePointerId)) return;
+      state.isDrawing = false;
+      state.activePointerId = null;
+      try {
+        dom.inkCanvas.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+
+      currentStroke = null;
+      // 筆畫結束後立即進行全量平滑重繪以確保最高渲染精細度
+      redrawAllStrokes();
+      triggerAutoSave();
+    }
+
+    // 局部即時平滑線段繪製 (採用二次貝茲曲線 Quadratic Bézier Curve 補插值)
+    function drawStrokeSegment(stroke, newIndex, isStart) {
+      const dpr = window.devicePixelRatio || 1;
+      const ctx = dom.inkCanvas.getContext('2d');
+      const pts = stroke.points;
+      
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = stroke.color;
+
+      // 壓感動態粗細運算
+      const curPt = pts[newIndex];
+      const dynamicWidth = stroke.width * (0.5 + curPt.pressure * 1.0);
+      ctx.lineWidth = dynamicWidth;
+
+      if (isStart || pts.length === 1) {
+        ctx.fillStyle = stroke.color;
+        ctx.beginPath();
+        ctx.arc(curPt.x, curPt.y, dynamicWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (pts.length === 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.stroke();
+      } else {
+        // 二次貝茲中點插值演算法，杜絕折角鋸齒
+        const p0 = pts[pts.length - 3];
+        const p1 = pts[pts.length - 2];
+        const p2 = pts[pts.length - 1];
+
+        const midPrev = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+        const midNext = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+        ctx.beginPath();
+        ctx.moveTo(midPrev.x, midPrev.y);
+        ctx.quadraticCurveTo(p1.x, p1.y, midNext.x, midNext.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 全量手寫畫布平滑重繪
+    function redrawAllStrokes() {
+      const inkCanvas = dom.inkCanvas;
+      const ctx = inkCanvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const pageItem = state.queue[state.currentIndex];
+      if (!pageItem) return;
+
+      ctx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      for (const stroke of state.currentStrokes) {
+        const pts = stroke.points;
+        if (!pts || pts.length === 0) continue;
+
+        ctx.strokeStyle = stroke.color;
+        ctx.fillStyle = stroke.color;
+
+        if (pts.length === 1) {
+          const pt = pts[0];
+          const dynamicWidth = stroke.width * (0.5 + pt.pressure * 1.0);
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, dynamicWidth / 2, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+
+        if (pts.length === 2) {
+          ctx.lineWidth = stroke.width;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          ctx.lineTo(pts[1].x, pts[1].y);
+          ctx.stroke();
+          continue;
+        }
+
+        ctx.lineWidth = stroke.width;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+
+        for (let i = 1; i < pts.length - 1; i++) {
+          const midX = (pts[i].x + pts[i + 1].x) / 2;
+          const midY = (pts[i].y + pts[i + 1].y) / 2;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+        }
+
+        const last = pts[pts.length - 1];
+        ctx.lineTo(last.x, last.y);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function undoLastStroke() {
+      if (state.currentStrokes.length === 0) return;
+      state.currentStrokes.pop();
+      redrawAllStrokes();
+      triggerAutoSave();
+      showToast('已復原上一筆筆跡');
+    }
+
+    function clearCurrentPageInk() {
+      if (state.currentStrokes.length === 0) return;
+      if (!confirm('確定要清空本頁所有批閱筆跡嗎？')) return;
+      state.currentStrokes = [];
+      redrawAllStrokes();
+      triggerAutoSave();
+      showToast('已清空當前頁筆跡');
+    }
+
+    // ==========================================================================
+    // 模組 4: 側欄成績試算表與鍵盤極速流 (Sidebar & Fast Keyboard Stream)
+    // ==========================================================================
+    
+    function renderQuestionInputs(scores = {}) {
+      dom.questionGrid.innerHTML = '';
+
+      state.questionList.forEach((qNum) => {
+        const row = document.createElement('div');
+        row.className = 'question-row';
+
+        const label = document.createElement('div');
+        label.className = 'question-name';
+        label.textContent = `第 ${qNum} 題`;
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = 'any';
+        input.className = 'score-input';
+        input.dataset.question = qNum;
+        input.placeholder = '0';
+        input.value = scores[qNum] !== undefined ? scores[qNum] : '';
+        
+        // 鍵盤極速操作：輸入數值後按 Enter 跳至下一題
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const allInputs = Array.from(dom.questionGrid.querySelectorAll('.score-input'));
+            const curIdx = allInputs.indexOf(input);
+            if (curIdx < allInputs.length - 1) {
+              allInputs[curIdx + 1].focus();
+              allInputs[curIdx + 1].select();
+            } else {
+              // 最後一題若按 Enter，直接切換到下一頁
+              if (state.currentIndex < state.queue.length - 1) {
+                navigateToPage(state.currentIndex + 1);
+              }
+            }
+          }
+        });
+
+        input.addEventListener('input', () => {
+          calculateTotalScore();
+          triggerAutoSave();
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'del-q-btn';
+        delBtn.innerHTML = '✕';
+        delBtn.title = '刪除此題';
+        delBtn.addEventListener('click', () => {
+          deleteQuestion(qNum);
+        });
+
+        row.appendChild(label);
+        row.appendChild(input);
+        row.appendChild(delBtn);
+        dom.questionGrid.appendChild(row);
+      });
+
+      calculateTotalScore();
+    }
+
+    function calculateTotalScore() {
+      let total = 0;
+      const inputs = dom.questionGrid.querySelectorAll('.score-input');
+      inputs.forEach(input => {
+        const val = parseFloat(input.value);
+        if (!isNaN(val)) {
+          total += val;
+        }
+      });
+
+      // 處理小數點浮點數精度 (最多保留 2 位小數)
+      total = Math.round(total * 100) / 100;
+      dom.totalScoreDisplay.textContent = total;
+      return total;
+    }
+
+    function addQuestion() {
+      let nextNum = 1;
+      if (state.questionList.length > 0) {
+        const lastNum = parseInt(state.questionList[state.questionList.length - 1], 10);
+        nextNum = isNaN(lastNum) ? state.questionList.length + 1 : lastNum + 1;
+      }
+      state.questionList.push(String(nextNum));
+      Storage.saveConfig('questionList', state.questionList);
+      
+      const currentScores = getCurrentScores();
+      renderQuestionInputs(currentScores);
+      showToast(`已新增 第 ${nextNum} 題`);
+    }
+
+    function deleteQuestion(qNum) {
+      if (state.questionList.length <= 1) {
+        showToast('至少需保留 1 題');
+        return;
+      }
+      state.questionList = state.questionList.filter(q => q !== qNum);
+      Storage.saveConfig('questionList', state.questionList);
+      
+      const currentScores = getCurrentScores();
+      delete currentScores[qNum];
+      renderQuestionInputs(currentScores);
+      triggerAutoSave();
+    }
+
+    function getCurrentScores() {
+      const scores = {};
+      const inputs = dom.questionGrid.querySelectorAll('.score-input');
+      inputs.forEach(input => {
+        const qNum = input.dataset.question;
+        scores[qNum] = input.value;
+      });
+      return scores;
+    }
+
+    async function loadPageData(pageId) {
+      const data = await Storage.getPageData(pageId);
+      if (data) {
+        dom.studentIdInput.value = data.studentId || '';
+        dom.studentNameInput.value = data.studentName || '';
+        state.currentStrokes = data.strokes || [];
+        renderQuestionInputs(data.scores || {});
+      } else {
+        dom.studentIdInput.value = '';
+        dom.studentNameInput.value = '';
+        state.currentStrokes = [];
+        renderQuestionInputs({});
+      }
+      redrawAllStrokes();
+      updateGradedCount();
+    }
+
+    async function triggerAutoSave() {
+      if (state.currentIndex === -1) return;
+      const pageItem = state.queue[state.currentIndex];
+      if (!pageItem) return;
+
+      const pageData = {
+        id: pageItem.id,
+        name: pageItem.name,
+        studentId: dom.studentIdInput.value.trim(),
+        studentName: dom.studentNameInput.value.trim(),
+        scores: getCurrentScores(),
+        totalScore: calculateTotalScore(),
+        strokes: state.currentStrokes,
+        updatedAt: Date.now()
+      };
+
+      await Storage.savePageData(pageData);
+      renderQueueList();
+      updateGradedCount();
+    }
+
+    // ==========================================================================
+    // 模組 5: 導航、隊列切換與縮放 (Navigation & Viewport Zoom)
+    // ==========================================================================
+    
+    function navigateToPage(targetIndex) {
+      if (targetIndex < 0 || targetIndex >= state.queue.length) return;
+      state.currentIndex = targetIndex;
+      updateNavigationUI();
+      renderCurrentPage();
+      renderQueueList();
+    }
+
+    function updateNavigationUI() {
+      dom.curPageNum.textContent = state.currentIndex + 1;
+      dom.totalPageNum.textContent = state.queue.length;
+      dom.btnPrevPage.disabled = state.currentIndex <= 0;
+      dom.btnNextPage.disabled = state.currentIndex >= state.queue.length - 1;
+    }
+
+    function renderQueueList() {
+      dom.queueList.innerHTML = '';
+      Storage.getAllPagesData().then(savedList => {
+        const dataMap = new Map(savedList.map(item => [item.id, item]));
+
+        state.queue.forEach((item, idx) => {
+          const el = document.createElement('div');
+          el.className = `queue-item ${idx === state.currentIndex ? 'active' : ''}`;
+          
+          const saved = dataMap.get(item.id);
+          const studentDesc = saved && saved.studentName ? `${saved.studentId || ''} ${saved.studentName}` : `第 ${idx + 1} 頁`;
+          const scoreDesc = saved && saved.totalScore !== undefined ? `${saved.totalScore} 分` : '--';
+
+          el.innerHTML = `
+            <span>${studentDesc}</span>
+            <span class="queue-item-score">${scoreDesc}</span>
+          `;
+
+          el.addEventListener('click', () => {
+            navigateToPage(idx);
+          });
+
+          dom.queueList.appendChild(el);
+        });
+      });
+    }
+
+    async function updateGradedCount() {
+      const list = await Storage.getAllPagesData();
+      const count = list.filter(item => item.totalScore !== undefined && item.totalScore !== null && item.totalScore !== '').length;
+      dom.gradedCount.textContent = count;
+    }
+
+    function setZoom(newZoom) {
+      state.zoomLevel = Math.max(0.3, Math.min(3.0, newZoom));
+      applyZoom();
+    }
+
+    function applyZoom() {
+      dom.canvasStage.style.transform = `scale(${state.zoomLevel})`;
+      dom.btnZoomReset.textContent = `${Math.round(state.zoomLevel * 100)}%`;
+    }
+
+    function fitToWidth() {
+      const pageItem = state.queue[state.currentIndex];
+      if (!pageItem || !pageItem.width) return;
+      const containerWidth = dom.viewportContainer.clientWidth - 48;
+      const fitZoom = containerWidth / pageItem.width;
+      setZoom(fitZoom);
+    }
+
+    // ==========================================================================
+    // 模組 6: 全班成績 CSV 匯出 (包含 UTF-8 BOM 防 Excel 亂碼)
+    // ==========================================================================
+    
+    async function exportGradesToCsv() {
+      if (state.queue.length === 0) {
+        showToast('請先載入考卷');
+        return;
+      }
+
+      showToast('正在彙整全班成績並產出 CSV...');
+      const savedDataList = await Storage.getAllPagesData();
+      const dataMap = new Map(savedDataList.map(d => [d.id, d]));
+
+      const headers = ['檔案名稱/頁碼', '學號/座號', '學生姓名'];
+      state.questionList.forEach(q => headers.push(`第${q}題`));
+      headers.push('總分');
+
+      const rows = [];
+      rows.push(headers);
+
+      state.queue.forEach((pageItem) => {
+        const saved = dataMap.get(pageItem.id) || {};
+        const studentId = saved.studentId || '';
+        const studentName = saved.studentName || '';
+        const scores = saved.scores || {};
+        const total = saved.totalScore !== undefined ? saved.totalScore : '';
+
+        const row = [
+          pageItem.name,
+          studentId,
+          studentName
+        ];
+
+        state.questionList.forEach(q => {
+          row.push(scores[q] !== undefined ? scores[q] : '');
+        });
+
+        row.push(total);
+        rows.push(row);
+      });
+
+      const csvContent = rows.map(r => {
+        return r.map(cell => {
+          const str = String(cell);
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        }).join(',');
+      }).join('\r\n');
+
+      // 核心防線：在檔頭寫入 UTF-8 BOM (\uFEFF)，確保 Windows Excel 開啟繁體中文絕不亂碼
+      const bom = '\uFEFF';
+      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+      
+      const url = URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      downloadLink.href = url;
+      downloadLink.download = `考卷批閱成績表_${timestamp}.csv`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+
+      showToast('全班成績表 CSV 匯出成功！');
+    }
+
+    // ==========================================================================
+    // 模組 7: 快捷鍵、事件綁定與系統初始化
+    // ==========================================================================
+    
+    function showToast(msg) {
+      dom.toastMessage.textContent = msg;
+      dom.toastMessage.classList.add('show');
+      clearTimeout(dom.toastMessage.timer);
+      dom.toastMessage.timer = setTimeout(() => {
+        dom.toastMessage.classList.remove('show');
+      }, 2600);
+    }
+
+    function initEventListeners() {
+      // 檔案載入器連動
+      dom.btnLoadPdf.addEventListener('click', () => dom.inputPdf.click());
+      dom.btnLoadDir.addEventListener('click', () => dom.inputDir.click());
+      dom.btnLoadImages.addEventListener('click', () => dom.inputImages.click());
+
+      dom.inputPdf.addEventListener('change', (e) => {
+        if (e.target.files.length) handlePdfFiles(e.target.files);
+      });
+      dom.inputDir.addEventListener('change', (e) => {
+        if (e.target.files.length) handleImageFiles(e.target.files);
+      });
+      dom.inputImages.addEventListener('change', (e) => {
+        if (e.target.files.length) handleImageFiles(e.target.files);
+      });
+
+      // 分頁切換
+      dom.btnPrevPage.addEventListener('click', () => navigateToPage(state.currentIndex - 1));
+      dom.btnNextPage.addEventListener('click', () => navigateToPage(state.currentIndex + 1));
+
+      // 縮放控制
+      dom.btnZoomIn.addEventListener('click', () => setZoom(state.zoomLevel + 0.15));
+      dom.btnZoomOut.addEventListener('click', () => setZoom(state.zoomLevel - 0.15));
+      dom.btnZoomReset.addEventListener('click', () => setZoom(1.0));
+      dom.btnZoomFit.addEventListener('click', fitToWidth);
+
+      // 色彩與粗細選擇
+      document.querySelectorAll('.color-swatch').forEach(swatch => {
+        swatch.addEventListener('click', () => {
+          document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+          swatch.classList.add('active');
+          state.brush.color = swatch.dataset.color;
+        });
+      });
+
+      document.querySelectorAll('.width-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.width-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.brush.width = parseInt(btn.dataset.width, 10);
+        });
+      });
+
+      dom.btnUndo.addEventListener('click', undoLastStroke);
+      dom.btnClearPageInk.addEventListener('click', clearCurrentPageInk);
+
+      // 側欄操作
+      dom.studentIdInput.addEventListener('input', triggerAutoSave);
+      dom.studentNameInput.addEventListener('input', triggerAutoSave);
+      dom.btnAddQuestion.addEventListener('click', addQuestion);
+      dom.btnExportCsv.addEventListener('click', exportGradesToCsv);
+
+      dom.btnResetAll.addEventListener('click', async () => {
+        if (confirm('警告：確定要清空所有已批閱資料與分數記錄嗎？此動作無法復原。')) {
+          await Storage.clearAll();
+          state.queue = [];
+          state.currentIndex = -1;
+          dom.canvasStage.style.display = 'none';
+          dom.emptyState.style.display = 'block';
+          dom.studentIdInput.value = '';
+          dom.studentNameInput.value = '';
+          dom.totalScoreDisplay.textContent = '0';
+          dom.questionGrid.innerHTML = '';
+          dom.queueList.innerHTML = '';
+          dom.curPageNum.textContent = '0';
+          dom.totalPageNum.textContent = '0';
+          updateNavigationUI();
+          showToast('已重設並清空全部本地暫存');
+        }
+      });
+
+      // 防誤關閉視窗保護
+      window.addEventListener('beforeunload', (e) => {
+        if (state.queue.length > 0) {
+          e.preventDefault();
+          e.returnValue = '考卷批閱進度正在進行中，確定要離開嗎？';
+        }
+      });
+
+      // 全域鍵盤極速流
+      window.addEventListener('keydown', (e) => {
+        const isEditingInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+
+        if (!isEditingInput) {
+          if (e.key === 'PageDown' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            navigateToPage(state.currentIndex + 1);
+          } else if (e.key === 'PageUp' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            navigateToPage(state.currentIndex - 1);
+          } else if (e.key === '=' || e.key === '+') {
+            e.preventDefault();
+            setZoom(state.zoomLevel + 0.15);
+          } else if (e.key === '-') {
+            e.preventDefault();
+            setZoom(state.zoomLevel - 0.15);
+          } else if (e.key === '0') {
+            e.preventDefault();
+            setZoom(1.0);
+          }
+        }
+      });
+    }
+
+    // 系統開機啟動
+    async function bootstrap() {
+      await Storage.init();
+      const savedQuestions = await Storage.getConfig('questionList');
+      if (savedQuestions && Array.isArray(savedQuestions) && savedQuestions.length > 0) {
+        state.questionList = savedQuestions;
+      }
+
+      initBrushEngine();
+      initEventListeners();
+      renderQuestionInputs();
+      showToast('MarkFlow 批閱系統已就緒，請載入考卷');
+    }
+
+    // 啟動程式
+    window.addEventListener('DOMContentLoaded', bootstrap);
+  </script>
+</body>
+</html>
